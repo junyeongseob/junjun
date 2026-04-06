@@ -8,10 +8,41 @@ app = Flask(__name__)
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.join(BASE_DIR, "attendance.db")
 
+# 🔥 DB 초기화 (테이블 없으면 자동 생성)
+def init_db():
+    conn = sqlite3.connect(DB_PATH)
+    cur = conn.cursor()
+
+    # 근무표 테이블
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS work_schedule (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT,
+        date TEXT,
+        status TEXT
+    )
+    """)
+
+    # 비상근무 테이블
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS special_duty (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        duty TEXT,
+        name TEXT,
+        date TEXT
+    )
+    """)
+
+    conn.commit()
+    conn.close()
+
 def get_db():
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
+
+# 🔥 서버 시작 시 DB 초기화 실행
+init_db()
 
 # 근무표 조회
 @app.route("/schedule")
@@ -24,7 +55,7 @@ def get_schedule():
 
     if dates:
         date_list = dates.split(",")
-        placeholders = ",".join("?"*len(date_list))
+        placeholders = ",".join("?" * len(date_list))
         cur.execute(
             f"SELECT name, date, status FROM work_schedule WHERE date IN ({placeholders})",
             date_list
@@ -86,7 +117,7 @@ def add_schedule():
 
     return jsonify({"result": "ok"})
 
-# ⭐ 근무 일괄 추가
+# 근무 일괄 추가
 @app.route("/add_schedule_bulk", methods=["POST"])
 def add_schedule_bulk():
     data = request.json["data"]
@@ -115,7 +146,7 @@ def add_schedule_bulk():
 
     return jsonify({"result": "ok"})
 
-# ⭐ 비상근무 추가
+# 비상근무 추가
 @app.route("/add_special", methods=["POST"])
 def add_special():
     data = request.json
@@ -133,7 +164,7 @@ def add_special():
 
     return jsonify({"result": "ok"})
 
-# ⭐ 근무 삭제
+# 근무 삭제
 @app.route("/delete_schedule", methods=["POST"])
 def delete_schedule():
     data = request.json
@@ -151,7 +182,7 @@ def delete_schedule():
 
     return jsonify({"result": "ok"})
 
-# ⭐ 비상근무 삭제
+# 비상근무 삭제
 @app.route("/delete_special", methods=["POST"])
 def delete_special():
     data = request.json
@@ -169,6 +200,7 @@ def delete_special():
 
     return jsonify({"result": "ok"})
 
+# HTML
 @app.route("/")
 def index():
     return send_from_directory(os.getcwd(), "test.html")
