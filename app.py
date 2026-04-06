@@ -3,12 +3,8 @@ import sqlite3
 import os
 
 app = Flask(__name__)
+DB_PATH = "attendance.db"
 
-# 🔥 DB 경로 (Render 대응)
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DB_PATH = os.path.join(BASE_DIR, "attendance.db")
-
-# 이름 순서 및 업무
 people_info = [
     ("남산분소장", "남산분소 업무총괄"),
     ("김재홍", "남산분소 현장관리"),
@@ -28,19 +24,15 @@ people_info = [
     ("최성복", "사회복무요원")
 ]
 
-# DB 연결
 def get_db():
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
 
-# 근무표 조회
-@app.route("/schedule", methods=["GET"])
-def get_schedule():
+@app.route("/schedule")
+def schedule():
     dates = request.args.get("dates")
     month = request.args.get("month")
-    date = request.args.get("date")
-
     conn = get_db()
     cur = conn.cursor()
 
@@ -48,77 +40,72 @@ def get_schedule():
         date_list = dates.split(",")
         placeholders = ",".join("?" * len(date_list))
         cur.execute(
-            f"SELECT name, date, status FROM work_schedule WHERE date IN ({placeholders}) ORDER BY name, date",
+            f"SELECT name, date, status FROM work_schedule WHERE date IN ({placeholders})",
             date_list
         )
-    elif date:
+    else:
         cur.execute(
-            "SELECT name, date, status FROM work_schedule WHERE date=? ORDER BY name",
-            (date,)
-        )
-    elif month:
-        cur.execute(
-            "SELECT name, date, status FROM work_schedule WHERE date LIKE ? ORDER BY name, date",
+            "SELECT name, date, status FROM work_schedule WHERE date LIKE ?",
             (f"{month}%",)
         )
-    else:
-        return jsonify({})
 
     rows = cur.fetchall()
     conn.close()
 
-    schedule = {}
-    for row in rows:
-        if row["name"] not in schedule:
-            schedule[row["name"]] = {}
-        schedule[row["name"]][row["date"]] = row["status"]
+    result = {}
+    for r in rows:
+        result.setdefault(r["name"], {})[r["date"]] = r["status"]
 
-    ordered_schedule = {}
+    ordered = {}
     for name, _ in people_info:
-        ordered_schedule[name] = schedule.get(name, {})
+        ordered[name] = result.get(name, {})
 
-    return jsonify(ordered_schedule)
+    return jsonify(ordered)
 
-# 비상 근무 조회
-@app.route("/special", methods=["GET"])
-def get_special():
+@app.route("/special")
+def special():
     month = request.args.get("month")
-    date = request.args.get("date")
+    conn = get_db()
+    cur = conn.cursor()
+
+    cur.execute(
+        "SELECT duty, name, date FROM special_duty WHERE date LIKE ?",
+        (f"{month}%",)
+    )
+
+    rows = cur.fetchall()
+    conn.close()
+
+    result = {}
+    for r in rows:
+        result.setdefault(r["date"], {}).setdefault(r["duty"], []).append(r["name"])
+
+    return jsonify(result)
+
+# ⭐ 추가된 부분
+@app.route("/add_schedule", methods=["POST"])
+def add_schedule():
+    data = request.json
+    name = data["name"]
+    date = data["date"]
+    status = data["status"]
 
     conn = get_db()
     cur = conn.cursor()
 
-    if date:
-        cur.execute(
-            "SELECT duty, name, date FROM special_duty WHERE date=?",
-            (date,)
-        )
-    elif month:
-        cur.execute(
-            "SELECT duty, name, date FROM special_duty WHERE date LIKE ?",
-            (f"{month}%",)
-        )
-    else:
-        return jsonify({})
+    cur.execute(
+        "INSERT INTO work_schedule (name, date, status) VALUES (?, ?, ?)",
+        (name, date, status)
+    )
 
-    rows = cur.fetchall()
+    conn.commit()
     conn.close()
 
-    special = {}
-    for row in rows:
-        if row["date"] not in special:
-            special[row["date"]] = {}
-        if row["duty"] not in special[row["date"]]:
-            special[row["date"]][row["duty"]] = []
-        special[row["date"]][row["duty"]].append(row["name"])
+    return jsonify({"result": "success"})
 
-    return jsonify(special)
-
-# HTML 제공
 @app.route("/")
 def index():
-    return send_from_directory(BASE_DIR, "test.html")
+    return send_from_directory(os.getcwd(), "test.html")
 
-# 🔥 로컬 실행용 (Render에서는 gunicorn이 실행함)
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    app.run()
