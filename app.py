@@ -1,6 +1,8 @@
 from flask import Flask, send_from_directory, jsonify, request
 import sqlite3
 import os
+from openpyxl import load_workbook
+from datetime import datetime
 
 app = Flask(__name__)
 
@@ -199,6 +201,66 @@ def delete_special():
     conn.close()
 
     return jsonify({"result": "ok"})
+
+# 🔥 엑셀 자동 업로드
+@app.route("/upload_excel_auto", methods=["POST"])
+def upload_excel_auto():
+    file = request.files.get("file")
+
+    if not file:
+        return jsonify({"message": "파일 없음"}), 400
+
+    wb = load_workbook(file, data_only=True)
+    ws = wb.active
+
+    conn = get_db()
+    cur = conn.cursor()
+
+    inserted = 0
+
+    # 남산분소 양식 기준 1차 설정값
+    # 안 맞으면 이 3개만 나중에 조정하면 됨
+    date_row = 2
+    name_col = 2
+    start_col = 3
+
+    for row in range(3, ws.max_row + 1):
+        name = ws.cell(row=row, column=name_col).value
+
+        if not name:
+            continue
+
+        for col in range(start_col, ws.max_column + 1):
+            date_cell = ws.cell(row=date_row, column=col).value
+            status = ws.cell(row=row, column=col).value
+
+            if not date_cell or not status:
+                continue
+
+            # 날짜 변환
+            if isinstance(date_cell, datetime):
+                date_str = date_cell.strftime("%Y-%m-%d")
+            else:
+                date_str = str(date_cell).strip()
+
+            name_str = str(name).strip()
+            status_str = str(status).strip()
+
+            if name_str in ["None", "nan", ""]:
+                continue
+            if status_str in ["None", "nan", ""]:
+                continue
+
+            cur.execute(
+                "INSERT INTO work_schedule (name, date, status) VALUES (?, ?, ?)",
+                (name_str, date_str, status_str)
+            )
+            inserted += 1
+
+    conn.commit()
+    conn.close()
+
+    return jsonify({"message": f"{inserted}개 자동 입력 완료"})
 
 # HTML
 @app.route("/")
