@@ -80,14 +80,12 @@ td, th { border: 1px solid #333; padding: 5px; text-align: center; }
 <tbody id="body"></tbody>
 </table>
 
-<!-- 근무 추가 -->
 <h3>근무 추가</h3>
 이름: <input id="name">
 날짜: <input type="date" id="date_input">
 상태: <input id="status">
 <button onclick="addSchedule()">추가</button>
 
-<!-- 비상근무 추가 (🔥 드롭다운 적용) -->
 <h3>비상근무 추가</h3>
 이름: <input id="s_name">
 날짜: <input type="date" id="s_date">
@@ -101,7 +99,6 @@ td, th { border: 1px solid #333; padding: 5px; text-align: center; }
 
 <button onclick="addSpecial()">추가</button>
 
-<!-- 일괄 입력 -->
 <h3>근무표 일괄 입력</h3>
 <textarea id="schedule_bulk" rows="5" cols="60"></textarea><br>
 <button onclick="addScheduleBulk()">일괄 추가</button>
@@ -135,20 +132,12 @@ const flexData = [
 ];
 
 function loadSchedule(){
-    const m = document.getElementById("month").value;
-    const d = document.getElementById("day").value;
-
+    let t=new Date();
     let dates=[];
-
-    if(d){
-        dates=[d];
-    } else {
-        let t=new Date();
-        for(let i=0;i<3;i++){
-            let x=new Date(t);
-            x.setDate(t.getDate()+i);
-            dates.push(x.toISOString().slice(0,10));
-        }
+    for(let i=0;i<3;i++){
+        let x=new Date(t);
+        x.setDate(t.getDate()+i);
+        dates.push(x.toISOString().slice(0,10));
     }
 
     fetch(`/schedule?dates=${dates.join(",")}`)
@@ -177,8 +166,9 @@ function updateSummary(data){
         `총원 ${total} | 근무 ${work} | 휴무 ${off}`;
 }
 
+// 🔥 여기 수정됨 (업무 표시 추가)
 function buildTable(data, dates){
-    let head="<tr><th>이름</th>";
+    let head="<tr><th>이름(업무)</th>";
     dates.forEach(x=>head+=`<th>${x.slice(8)}</th>`);
     head+="</tr>";
     document.getElementById("head").innerHTML=head;
@@ -187,20 +177,22 @@ function buildTable(data, dates){
     const today = new Date().toISOString().slice(0,10);
 
     people.forEach(p=>{
-        const name=p[0], cls=p[2];
-        body+=`<tr><td class="${cls}">${name}</td>`;
+        const name=p[0], job=p[1], cls=p[2];
+
+        body+=`<tr><td class="${cls}">${name}(${job})</td>`;
+
         dates.forEach(d=>{
             const s = (data[name] && data[name][d]) || "";
             const t = (d===today) ? "today" : "";
             body+=`<td class="${s} ${t}">${s}</td>`;
         });
+
         body+="</tr>";
     });
 
     document.getElementById("body").innerHTML=body;
 }
 
-// 🔥 비상근무 + 삭제 버튼
 function showFlexSpecial(date){
     const flexCol = document.getElementById("flex_column");
     const specialCol = document.getElementById("special_column");
