@@ -2,90 +2,233 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>근무현황</title>
+<title>남산분소 근무현황표</title>
+<style>
+table { border-collapse: collapse; width: 100%; }
+td, th { border: 1px solid #333; padding: 5px; text-align: center; }
+
+.today { background-color: yellow; }
+.휴무 { background-color: lightgray; }
+.반가, .연가, .조퇴, .보상휴가 { background-color: lightblue; }
+.출장 { background-color: orange; }
+.삼릉, .포석정, .새갓골, .용장, .동남산, .분소 { background-color: lightgreen; }
+
+.sky { background:#d0e7ff; }
+.green { background:#e0ffc1; }
+.purple { background:#e8d4ff; }
+.orange { background:#ffe6cc; }
+.blue { background:#a0d8ff; }
+
+.flex-special-container {
+    display: flex;
+    gap: 50px;
+    margin-top: 15px;
+}
+
+.flex-column, .special-column {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.flex-column div {
+    color: darkblue;
+    font-weight: bold;
+}
+
+.special-column div {
+    padding: 2px 4px;
+    border-radius: 3px;
+    margin-bottom: 3px;
+    display: inline-block;
+}
+
+.fire { background:#d2b48c; }
+.alert { background:#ffcccc; }
+.warning { background:#ff0000; color:white; }
+</style>
 </head>
+
 <body>
 
-<h2>근무현황</h2>
+<h2>남산분소 근무현황표</h2>
 
+<label>월: <input type="month" id="month"></label>
+<label>일: <input type="date" id="day"></label>
 <button onclick="loadSchedule()">조회</button>
 
-<h3>오늘 인원</h3>
+<!-- 🔝 추가: 인원 현황 -->
+<h3>오늘 인원 현황</h3>
 <div id="summary"></div>
 
-<h3>비상근무</h3>
-<div id="special"></div>
-
 <h3>근무표</h3>
-<table border="1">
+<table>
 <thead id="head"></thead>
 <tbody id="body"></tbody>
 </table>
 
-<h3>근무 추가</h3>
-<input id="name" placeholder="이름">
-<input id="date" type="date">
-<input id="status" placeholder="상태">
-<button onclick="addSchedule()">추가</button>
+<h3>유연근무자 & 비상근무</h3>
+<div class="flex-special-container">
+    <div id="flex_column" class="flex-column"></div>
+    <div id="special_column" class="special-column"></div>
+</div>
 
-<h3>비상근무 추가</h3>
-<input id="s_name" placeholder="이름">
-<input id="s_date" type="date">
-<input id="s_duty" placeholder="근무종류">
-<button onclick="addSpecial()">추가</button>
-
+<!-- 🔽 추가: 근무표 일괄 입력 -->
 <h3>근무표 일괄 입력 (엑셀 복붙)</h3>
-<textarea id="bulk"></textarea><br>
-<button onclick="addBulk()">일괄 추가</button>
+<textarea id="schedule_bulk" rows="5" cols="60"
+placeholder="이름    날짜    상태"></textarea><br>
+<button onclick="addScheduleBulk()">일괄 추가</button>
 
 <script>
 
+// 사람 정보
+const people = [
+["남산분소장","남산분소 업무총괄","sky"],
+["김재홍","남산분소 현장관리","sky"],
+["강이레","남산분소 현장관리","sky"],
+["윤동희","안전관리","sky"],
+["예린","공원자원해설","green"],
+["권용조","공원자원해설","green"],
+["손영인","공원자원해설","green"],
+["옥희영","공원자원해설","green"],
+["김영호","공원환경관리","purple"],
+["서종명","공원환경관리","purple"],
+["고현찬","공원환경관리","purple"],
+["김복현","녹색순찰대","orange"],
+["서진숙","녹색순찰대","orange"],
+["정문길","녹색순찰대","orange"],
+["김태문","녹색순찰대","orange"],
+["최성복","사회복무요원","blue"]
+];
+
+const flexData = [
+{ name:"예린", text:"월~금 08:30~17:30" },
+{ name:"권용조", text:"화,목 08:00~17:00" },
+{ name:"옥희영", text:"토 08:00~17:00" },
+{ name:"서진숙", text:"수 08:00~17:00" }
+];
+
 function loadSchedule(){
-    fetch("/schedule?month=2026-04")
+    const m = document.getElementById("month").value;
+    const d = document.getElementById("day").value;
+
+    let dates=[];
+
+    if(d){
+        dates=[d];
+    } else if(!m){
+        let t=new Date();
+        for(let i=0;i<3;i++){
+            let x=new Date(t);
+            x.setDate(t.getDate()+i);
+            dates.push(x.toISOString().slice(0,10));
+        }
+    } else {
+        let y = m.split("-")[0];
+        let mm = m.split("-")[1];
+        let last = new Date(y, mm, 0).getDate();
+        for(let i=1;i<=last;i++){
+            dates.push(`${m}-${String(i).padStart(2,"0")}`);
+        }
+    }
+
+    let url = (!m || d) 
+        ? `/schedule?dates=${dates.join(",")}`
+        : `/schedule?month=${m}`;
+
+    fetch(url)
     .then(r=>r.json())
     .then(data=>{
-        document.getElementById("body").innerHTML = JSON.stringify(data);
+        buildTable(data, dates);
+        updateSummary(data); // ⭐ 추가
+    })
+    .then(()=> showFlexSpecial(dates[0]));
+}
+
+// ⭐ 인원 요약
+function updateSummary(data){
+    const today = new Date().toISOString().slice(0,10);
+
+    let total = people.length;
+    let work = 0;
+    let off = 0;
+
+    people.forEach(p=>{
+        const status = (data[p[0]] && data[p[0]][today]) || "";
+        if(["휴무","연가","반가","병가"].includes(status)) off++;
+        else work++;
     });
 
-    fetch("/special?month=2026-04")
+    document.getElementById("summary").innerHTML =
+        `총원 ${total} | 근무 ${work} | 휴무 ${off}`;
+}
+
+// 근무표
+function buildTable(data, dates){
+    let head="<tr><th>이름(업무)</th>";
+    dates.forEach(x=>head+=`<th>${x.slice(8)}</th>`);
+    head+="</tr>";
+    document.getElementById("head").innerHTML=head;
+
+    let body="";
+    const today = new Date().toISOString().slice(0,10);
+
+    people.forEach(p=>{
+        const name=p[0], job=p[1], cls=p[2];
+        body+=`<tr><td class="${cls}">${name}(${job})</td>`;
+        dates.forEach(d=>{
+            const s = (data[name] && data[name][d]) || "";
+            const t = (d===today) ? "today" : "";
+            body+=`<td class="${s} ${t}">${s}</td>`;
+        });
+        body+="</tr>";
+    });
+    document.getElementById("body").innerHTML=body;
+}
+
+// 유연근무 + 비상근무
+function showFlexSpecial(date){
+    const flexCol = document.getElementById("flex_column");
+    const specialCol = document.getElementById("special_column");
+
+    flexCol.innerHTML="";
+    specialCol.innerHTML="";
+
+    flexData.forEach(f=>{
+        const div = document.createElement("div");
+        div.textContent = `${f.name} ${f.text}`;
+        flexCol.appendChild(div);
+    });
+
+    fetch(`/special?month=${date.slice(0,7)}`)
     .then(r=>r.json())
-    .then(data=>{
-        document.getElementById("special").innerHTML = JSON.stringify(data);
+    .then(special=>{
+        if(special[date]){
+            Object.keys(special[date]).forEach(duty=>{
+                const div = document.createElement("div");
+                div.textContent = `${duty}: ${special[date][duty].join(", ")}`;
+                specialCol.appendChild(div);
+            });
+        }
     });
 }
 
-function addSchedule(){
-    fetch("/add_schedule",{
-        method:"POST",
-        headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({
-            name:document.getElementById("name").value,
-            date:document.getElementById("date").value,
-            status:document.getElementById("status").value
-        })
-    }).then(()=>alert("추가 완료"));
-}
+// ⭐ 일괄 입력
+function addScheduleBulk(){
+    const text = document.getElementById("schedule_bulk").value;
+    const lines = text.split("\n").filter(x => x.trim() !== "");
 
-function addSpecial(){
-    fetch("/add_special",{
-        method:"POST",
-        headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({
-            name:document.getElementById("s_name").value,
-            date:document.getElementById("s_date").value,
-            duty:document.getElementById("s_duty").value
-        })
-    }).then(()=>alert("추가 완료"));
-}
-
-function addBulk(){
-    const lines = document.getElementById("bulk").value.split("\n");
-
-    fetch("/add_schedule_bulk",{
-        method:"POST",
-        headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({data:lines})
-    }).then(()=>alert("일괄 완료"));
+    fetch("/add_schedule_bulk", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ data: lines })
+    })
+    .then(()=> {
+        alert("일괄 입력 완료");
+        loadSchedule();
+    });
 }
 
 </script>
