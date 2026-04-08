@@ -10,7 +10,7 @@ td, th { border: 1px solid #333; padding: 5px; text-align: center; }
 
 .today { background-color: yellow; }
 .휴무 { background-color: lightgray; }
-.반가, .연가, .조퇴, .보상휴가 { background-color: lightblue; }
+.반가, .연가, .조퇴, .보상휴가, .병가 { background-color: lightblue; }
 .출장 { background-color: orange; }
 .삼릉, .포석정, .새갓골, .용장, .동남산, .분소 { background-color: lightgreen; }
 
@@ -109,7 +109,7 @@ td, th { border: 1px solid #333; padding: 5px; text-align: center; }
 
 <script>
 const people = [
-["이성원","남산분소 업무총괄","sky"],
+["남산분소장","남산분소 업무총괄","sky"],
 ["김재홍","남산분소 현장관리","sky"],
 ["강이레","남산분소 현장관리","sky"],
 ["윤동희","안전관리","sky"],
@@ -134,6 +134,17 @@ const flexData = [
 { name:"서진숙", text:"수 08:00~17:00" }
 ];
 
+function formatLocalDate(dateObj) {
+    const year = dateObj.getFullYear();
+    const month = String(dateObj.getMonth() + 1).padStart(2, "0");
+    const day = String(dateObj.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+}
+
+function getTodayLocal() {
+    return formatLocalDate(new Date());
+}
+
 function loadSchedule(){
     const monthInput = document.getElementById("month").value;
     const dayInput = document.getElementById("day").value;
@@ -155,7 +166,7 @@ function loadSchedule(){
         for (let i = 0; i < 3; i++) {
             let x = new Date(t);
             x.setDate(t.getDate() + i);
-            dates.push(x.toISOString().slice(0, 10));
+            dates.push(formatLocalDate(x));
         }
     }
 
@@ -173,7 +184,7 @@ function loadSchedule(){
 }
 
 function updateSummary(data){
-    const today = new Date().toISOString().slice(0,10);
+    const today = getTodayLocal();
 
     let total = people.length;
     let work = 0;
@@ -196,7 +207,7 @@ function buildTable(data, dates){
     document.getElementById("head").innerHTML = head;
 
     let body = "";
-    const today = new Date().toISOString().slice(0,10);
+    const today = getTodayLocal();
 
     people.forEach(p=>{
         const name = p[0], job = p[1], cls = p[2];
@@ -204,7 +215,7 @@ function buildTable(data, dates){
 
         dates.forEach(d=>{
             const s = (data[name] && data[name][d]) || "";
-            const t = (d===today) ? "today" : "";
+            const t = (d === today) ? "today" : "";
             body += `<td class="${s} ${t}">${s}</td>`;
         });
 
@@ -334,12 +345,24 @@ function uploadExcelAuto(){
 window.onload = function() {
     loadSchedule();
 
-    // 5분마다 서버에 ping 보내기
+    // 5분마다 Render ping
     setInterval(() => {
         fetch("/ping")
             .then(() => console.log("ping sent"))
             .catch(() => console.log("ping error"));
     }, 5 * 60 * 1000);
+
+    // 날짜 바뀌면 자동 갱신
+    let lastDate = getTodayLocal();
+
+    setInterval(() => {
+        const currentDate = getTodayLocal();
+        if (currentDate !== lastDate) {
+            lastDate = currentDate;
+            console.log("날짜 바뀜 → 자동 새로고침");
+            loadSchedule();
+        }
+    }, 60 * 1000);
 };
 </script>
 
